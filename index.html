@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>Styled Map Types</title>
+  <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
+  <meta charset="utf-8">
+
+  <script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+  <script src="https://unpkg.com/vue/dist/vue.js"></script>
+  <script src="https://unpkg.com/vue-router/dist/vue-router.js"></script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.19.2/axios.min.js"></script>
+  <link href='https://fonts.googleapis.com/css?family=Delius+Swash+Caps:400' rel='stylesheet' type='text/css'>
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+  <link href="https://stackpath.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css" rel="stylesheet" integrity="sha384-wvfXpqpZZVQGK6TAh5PVlGOfQNHSoD2xbE+QkPxCAFlNEevoEH3Sl0sibVcOQVnN" crossorigin="anonymous">
+  <style>
+    #map {
+      height: 100%;
+    }
+
+    @media only screen and (max-width: 920px) {
+      body {
+        font-size: 10px;
+      }
+    }
+
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      font-family: 'Delius Swash Caps', cursive;
+    }
+
+    ,
+    ul {
+      list-style-type: none;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="app" class="container" style="margin-top:1em;max-width: 80%">
+    <!-- <div style="background-color:#3498db;"> .</div> -->
+    <nav class="nav nav-pills nav-justified" style="font-size:1.5em">
+      <!-- <router-link to="/nav1" class="nav-item nav-link disabled" href="#">Cadastrinho Básico</router-link> -->
+      <router-link to="/nav2" class="nav-item nav-link" href="#">Vizinhança</router-link>
+      <router-link to="/nav4" class="nav-item nav-link " href="#">Pedir ou Oferecer</router-link>
+      <router-link to="/nav3" class="nav-item nav-link" href="#">Quem Somos</router-link>
+      <router-link to="/nav5" class="nav-item nav-link" href="#">Pedidos até o Momento</router-link>
+    </nav>
+    <div style="background-color:#3498db;height:5px"> .</div>
+    <p>{{ $route.name }}</p>
+    <router-view></router-view>
+  </div>
+
+  <div style="margin-left:22%;" id="example-1" v-if="locais.length">
+    <div v-for="(a, index) in locais">
+      <input type="radio" id="jack" :value="index" v-model="checkedNames">
+      <label for="jack">{{a}}</label>
+    </div>
+    <!-- <h4>Coordenadas em Latitude: {{}} e Longitude: {{}}</h4> -->
+  </div>
+  <div id="p" style="height:100%" v-show="mostramapa">
+    <div id="map" style="padding:1em;margin-top:1em;"></div>
+  </div>
+  <div id="lista" v-if="mostralista">
+    <div class="container" style="margin-top:2em">
+      <div v-for="pedido in listapedidos" :key="pedido.Endereco">
+        <h3 class="text-left"><strong>{{pedido.Nome}}</strong></h3>
+        <button style="float:right;margin-top: -1em;" type="submit" @click="sendItem(pedido.Fone)" class="btn btn-info">Contatos</button>
+        <p style="float:right;margin-right:1em" v-if="aparececontato.includes(pedido.Fone)"><strong>{{pedido.Fone}}</strong></p>
+        <p>{{pedido.Resumo}} - ({{pedido.Endereco}})</p>
+        <hr>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    async function RegistraUsuario(userForm) {
+      axios.post('https://api.pinata.cloud/pinning/pinJSONToIPFS',
+        userForm, {
+          maxContentLength: 'Infinity', //this is needed to prevent axios from erroring out with large files
+          headers: {
+            'Content-Type': `application/json`,
+            'pinata_api_key': "75d22c8b807e29fafa0c",
+            'pinata_secret_api_key': "077179bce34987934eb3e4a5f2699f4f7d56c00687d806a7e0d5d1838634923d"
+
+          }
+        })
+    }
+    async function ConnectPinata(adicional) {
+      let h = {
+        'Content-Type': `text/plain`,
+        'pinata_api_key': "75d22c8b807e29fafa0c",
+        'pinata_secret_api_key': "077179bce34987934eb3e4a5f2699f4f7d56c00687d806a7e0d5d1838634923d"
+      }
+      var r = await axios.get("https://api.pinata.cloud/data/pinList?status=pinned" + adicional, {
+        headers: h
+      })
+      return r.data
+    }
+
+    var lista = new Vue({
+      el: '#lista',
+      data: {
+        mostralista: true,
+        listapedidos: [],
+        aparececontato:[]
+      },
+      methods: {
+        sendItem: function(item) {
+          this.aparececontato.push(item)
+        }
+      }
+    })
+
+    function confere() {
+      if (!document.URL.includes('nav5'))
+        lista.mostralista = false;
+    }
+    confere()
+    async function ConnectPinata2(url) {
+      var r = await axios.get(url)
+      return r.data
+    }
+    var reclamacoesArr = [];
+    var pedidosArr = [];
+
+    async function PreencheValoresPinata() {
+      let res = await ConnectPinata('')
+      let count = res.count;
+      let arrayRes = res.rows
+
+      let offset = 0;
+      while (arrayRes.length < count) {
+        offset += 10;
+        let res = await ConnectPinata('&pageOffset=' + offset)
+        arrayRes = arrayRes.concat(res.rows)
+      }
+      // console.log(arrayRes)
+
+      for (var i = 0; i < arrayRes.length; i++) {
+        let response = await ConnectPinata2("https://gateway.pinata.cloud/ipfs/" + arrayRes[i].ipfs_pin_hash)
+        if (response.ty == 1)
+          reclamacoesArr.push(response)
+        else if (response.ty == 3)
+          pedidosArr.push(response)
+      }
+      lista.listapedidos = pedidosArr
+    }
+
+    PreencheValoresPinata()
+
+    function alo(a) {
+      console.log(a)
+    }
+    var coordenadasdomapa = {}
+    var example1 = new Vue({
+      el: "#example-1",
+      data: {
+        checkedNames: [],
+        locais: [],
+        localEscolhido: '',
+        res: {}
+      },
+      watch: {
+        checkedNames: function(val) {
+          this.localEscolhido = this.res[val]
+          if (typeof this.localEscolhido !== 'undefined') {
+            // if (typeof localideal == 'undefined') {
+            coordenadasdomapa.lat = this.localEscolhido.lat
+            coordenadasdomapa.lon = this.localEscolhido.lon
+            // } else {
+            // coordenadasdomapa.lat = localideal.lat
+            // coordenadasdomapa.lon = localideal.long
+            // }
+            initMap()
+            this.locais = [];
+            this.checkedNames = [];
+          }
+        }
+      }
+    })
+
+    var mapper = new Vue({
+      el: '#p',
+      data: {
+        mostramapa: false,
+      }
+    })
+    var mapacriado = false;
+    window.onclick = function() {
+      if (window.location.href.includes('nav2') && mapacriado)
+        mapper.mostramapa = true
+      else mapper.mostramapa = false;
+      if (!window.location.href.includes('nav5'))
+        lista.mostralista = false;
+      else lista.mostralista = true
+    }
+
+    var loading = true,
+      errored = false;
+
+    async function descobreLatLon(endereco) {
+      let res = await axios
+        .get('https://us1.locationiq.com/v1/search.php?key=pk.b5cee6458f3b2bbcf7667a789fe6b935&q="' + endereco + '"&format=json&countrycodes=br&limit=5')
+      return res
+    }
+  </script>
+
+  <script>
+    // order in which these markers should display on top of each other.
+    function aloha() {
+      let formulario = {}
+      formulario.ty = 1
+      formulario.Nome = document.myform.Nome.value
+      formulario.Email = document.myform.Email.value
+      formulario.Phone = document.myform.Phone.value
+      formulario.Endereco = document.myform.Endereco.value
+      formulario.Password = document.myform.Password.value
+      executa(formulario)
+    }
+
+
+
+    async function executa(formulario) {
+      try {
+        if (Object.keys(localideal).length === 0 && localideal.constructor === Object) {
+          let res = await descobreLatLon(formulario.Endereco);
+          res = res.data[0]
+          formulario.latitude = parseFloat(res.lat)
+          formulario.longitude = parseFloat(res.lon)
+        }
+        formulario.latitude = localideal.lat.toString()
+        formulario.longitude = localideal.long.toString()
+        RegistraUsuario(formulario)
+      } catch (err) {
+        alert("Endereço nao encontrado")
+      }
+    }
+
+    async function locate(endereco) {
+      example1.checkedNames = '';
+      let local = document.myform2.Local.value
+      if (local.length == 0) {
+        alert('Digite um local no campo indicado por favor :)')
+        return
+      }
+      let res = await descobreLatLon(local);
+      res = res.data
+      example1.locais = res.map(a => a.display_name.split(',').slice(0, 4).join(' - '))
+      example1.res = res;
+    }
+
+
+    function pedidos() {
+      let formulario2 = {}
+      formulario2.ty = 3
+      formulario2.Nome = document.myform3.Nome.value
+      formulario2.Resumo = document.myform3.Resumo.value
+      formulario2.Endereco = document.myform3.Endereco.value
+      formulario2.Fone = document.myform3.Phone.value
+      executa(formulario2)
+      alert('Cadastro realizado com sucesso -------- :)')
+      setTimeout((a) => location.reload(true), 2000)
+    }
+
+    async function setMarkers(map) {
+      var marcacoes = pedidosArr
+
+      var image = {
+        url: 'https://cdn.iconscout.com/icon/free/png-512/avatar-370-456322.png',
+        scaledSize: new google.maps.Size(32, 32),
+        anchor: new google.maps.Point(-32, 32)
+      };
+
+      return marcacoes.map(mark => {
+        //console.log(mark)
+        var marker = new google.maps.Marker({
+          position: {
+            lat: parseFloat(mark.latitude),
+            lng: parseFloat(mark.longitude)
+          },
+          map: map,
+          icon: image,
+          draggable: true,
+          title: mark.Nome,
+          zIndex: 3
+        });
+
+        var infowindow = new google.maps.InfoWindow({
+          content: `${mark.Nome}: ${mark.Resumo} - (${mark.Endereco})`
+        });
+        marker.addListener('click', function() {
+          infowindow.open(map, marker);
+        });
+      })
+    }
+
+    function initMap() {
+
+      var styledMapType = new google.maps.StyledMapType(
+        [{
+            elementType: 'geometry',
+            stylers: [{
+              color: '#ebe3cd'
+            }]
+          },
+          {
+            elementType: 'labels.text.fill',
+            stylers: [{
+              color: '#523735'
+            }]
+          },
+          {
+            elementType: 'labels.text.stroke',
+            stylers: [{
+              color: '#f5f1e6'
+            }]
+          },
+          {
+            featureType: 'administrative',
+            elementType: 'geometry.stroke',
+            stylers: [{
+              color: '#c9b2a6'
+            }]
+          },
+          {
+            featureType: 'administrative.land_parcel',
+            elementType: 'geometry.stroke',
+            stylers: [{
+              color: '#dcd2be'
+            }]
+          },
+          {
+            featureType: 'administrative.land_parcel',
+            elementType: 'labels.text.fill',
+            stylers: [{
+              color: '#ae9e90'
+            }]
+          },
+          {
+            featureType: 'landscape.natural',
+            elementType: 'geometry',
+            stylers: [{
+              color: '#dfd2ae'
+            }]
+          },
+          {
+            featureType: 'poi',
+            elementType: 'geometry',
+            stylers: [{
+              color: '#dfd2ae'
+            }]
+          },
+          {
+            featureType: 'poi',
+            elementType: 'labels.text.fill',
+            stylers: [{
+              color: '#93817c'
+            }]
+          },
+          {
+            featureType: 'poi.park',
+            elementType: 'geometry.fill',
+            stylers: [{
+              color: '#a5b076'
+            }]
+          },
+          {
+            featureType: 'poi.park',
+            elementType: 'labels.text.fill',
+            stylers: [{
+              color: '#447530'
+            }]
+          },
+          {
+            featureType: 'road',
+            elementType: 'geometry',
+            stylers: [{
+              color: '#f5f1e6'
+            }]
+          },
+          {
+            featureType: 'road.arterial',
+            elementType: 'geometry',
+            stylers: [{
+              color: '#fdfcf8'
+            }]
+          }, {
+            featureType: 'poi.business',
+            stylers: [{
+              visibility: 'off'
+            }]
+          },
+          {
+            featureType: 'road.highway',
+            elementType: 'geometry',
+            stylers: [{
+              color: '#f8c967'
+            }]
+          },
+          {
+            featureType: 'road.highway',
+            elementType: 'geometry.stroke',
+            stylers: [{
+              color: '#e9bc62'
+            }]
+          },
+          {
+            featureType: 'road.highway.controlled_access',
+            elementType: 'geometry',
+            stylers: [{
+              color: '#e98d58'
+            }]
+          },
+          {
+            featureType: 'road.highway.controlled_access',
+            elementType: 'geometry.stroke',
+            stylers: [{
+              color: '#db8555'
+            }]
+          },
+          {
+            featureType: 'road.local',
+            elementType: 'labels.text.fill',
+            stylers: [{
+              color: '#806b63'
+            }]
+          },
+          {
+            featureType: 'transit.line',
+            elementType: 'geometry',
+            stylers: [{
+              color: '#dfd2ae'
+            }]
+          },
+          {
+            featureType: 'transit.line',
+            elementType: 'labels.text.fill',
+            stylers: [{
+              color: '#8f7d77'
+            }]
+          },
+          {
+            featureType: 'transit.line',
+            elementType: 'labels.text.stroke',
+            stylers: [{
+              color: '#ebe3cd'
+            }]
+          },
+          {
+            featureType: 'transit.station',
+            elementType: 'geometry',
+            stylers: [{
+              color: '#dfd2ae'
+            }]
+          },
+          {
+            featureType: 'water',
+            elementType: 'geometry.fill',
+            stylers: [{
+              color: '#b9d3c2'
+            }]
+          },
+          {
+            featureType: 'water',
+            elementType: 'labels.text.fill',
+            stylers: [{
+              color: '#92998d'
+            }]
+          }
+        ], {
+          name: 'Styled Map'
+        });
+
+      // Create a map object, and include the MapTypeId to add
+      // to the map type control.
+      // console.log(coordenadasdomapa)
+      var map = new google.maps.Map(document.getElementById('map'), {
+        center: {
+          lat: parseFloat(coordenadasdomapa.lat),
+          lng: parseFloat(coordenadasdomapa.lon)
+        },
+        zoom: 16,
+        disableDefaultUI: true,
+        scaleControl: false,
+        streetViewControl: false,
+        zoomControl: false,
+        gestureHandling: "greedy",
+        mapTypeControlOptions: {
+          mapTypeIds: ['roadmap', 'satellite', 'hybrid', 'terrain',
+            'styled_map'
+          ]
+        }
+      });
+
+      //Associate the styled map with the MapTypeId and set it to display.
+      map.mapTypes.set('styled_map', styledMapType);
+      map.setMapTypeId('styled_map');
+
+      setMarkers(map);
+      mapacriado = true;
+      mapper.mostramapa = true;
+    }
+  </script>
+  <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDGK1IexcFtKzRgPvlQVaZrWg_0ZT3KU4Y"> </script>
+
+
+</body>
+<script type="text/javascript">
+  const Nav1 = {
+    template: `<div>
+    <div>
+      <img src="https://res.cloudinary.com/dng6etlcm/image/upload/v1592084206/novaimg3_b2pfua.png" alt="Girl in a jacket" width="100%" height="50%">
+    </div>
+    <!-- <div style="background-color:#3498db;"> .</div> -->
+    <form name="myform" onsubmit="aloha();return false" style="margin-top:1em">
+      <div class="form-group">
+        <label>Qual o seu nome ou apelido pra gente se conhecer?</label>
+        <input type="text" class="form-control" name="Nome" placeholder="Pode deixar um apelido, mas seja responsável.. Ok">
+      </div>
+      <div class="form-group">
+        <label>Poderia informar seu endereço de email?</label>
+        <input type="email" class="form-control" name="Email" placeholder="Aqui vai o e-mail que você mais tem usado ultimamente. Não vale mentir viu..">
+      </div>
+      <div class="form-group">
+        <label>Pode deixar que agente cuida do número como se fosse o nosso e só repassa ele pra quem você permitir viu.</label>
+        <input type="tel" class="form-control" name="Phone" placeholder="Aqui vai o telefone pra contato no whatsapp ...">
+      </div>
+      <div class="form-group">
+        <label>Pra encontrar os vizinhos agente precisa compatilhar o endereço, Belezinha :]</label>
+        <input type="text" class="form-control" name="Endereco" placeholder="Gostaria de encontrar vizinhos nas redondezas da rua..">
+      </div>
+      <div class="form-group">
+        <label>Aqui fica a descricao que aparece ao lado da fotinho no mapa principal</label>
+        <input type="password" class="form-control" name="Password" placeholder="Aqui pode escrever um resuminho bem bacana.">
+      </div>
+      <p>
+        Posuimos alguns termos bem simples mas que devem ser seguidos:
+      </p>
+
+      <ul>
+        <li>Ter respeito por todos que aqui se encontram</li>
+        <li>Ofereça apenas aquilo que possui</li>
+        <li>Peça muito, mas ofereça muito mais</li>
+        <li>Aproveite para compartilhar aquilo que gostou, ou não :)</li>
+      </ul>
+      <div class="form-check">
+        <input type="checkbox" class="form-check-input" id="exampleCheck1">
+        <label class="form-check-label" for="exampleCheck1">Aceito os termos de uso</label><br>
+        <div class="col text-center">
+        <button style="margin-top:1em" type="submit" class="btn-lg btn-info">Me Cadastrar</button>
+        </div>
+      </div>
+    </form>
+    <hr>
+    </div>`
+  }
+  const Nav2 = {
+    template: `
+    <div style="text-align:center;"><h1 style="font-size:5em">Bem vindo ao <strong style="color:#3498db"> Empresta Aí?</strong></h1>
+    <form name="myform2" onsubmit="return false" style="margin-top:1em">
+      <div class="form-group">
+      <label>Vamos fazer da vizinhança um local onde se pode compartilhar e conhecer gente nova</label>
+        <div class="row" style="padding:1em">
+        <p class="col-md-1"></p>
+        <button class="col-md-3 btn btn-dark" >Meu Local<i class="fa fa-map-marker" aria-hidden="true"></i></button>
+        <input class="col-md-5 form-control" style="text-align:center" type="text" name="Local" placeholder="Localizar meu endereço">
+        <button class="col-md-3 btn btn-info" type="submit">Procurar</button>
+        </div>
+      </div>
+    </form>
+
+    </div>
+    `
+  }
+
+  var localideal ={}
+  function localizacao() {
+    let lt  = JSON.parse(localStorage.getItem('localideal'));
+    if (lt == null) {
+      navigator.geolocation.getCurrentPosition(position => {
+        localideal.lat = position.coords.latitude;
+        localideal.long = position.coords.longitude;
+        localStorage.setItem('localideal', JSON.stringify(localideal));
+      })
+    }
+    else {
+      localideal = lt
+    }
+  };
+  localizacao()
+
+document.addEventListener('submit', function(e) {
+    if (e.submitter.outerText == "Meu Local") {
+      autolocaliza()
+    }
+    if (e.submitter.outerText == "Procurar") {
+    locate()
+  }
+})
+
+  function autolocaliza(){
+    if (Object.keys(localideal).length === 0 && localideal.constructor === Object) {
+      localizacao()
+    }
+    if (Object.keys(localideal).length === 0 && localideal.constructor === Object) {
+      alert('Nao foi possível obter a sua localização')
+      return
+    }
+    console.log(localideal)
+    coordenadasdomapa.lat = localideal.lat.toString()
+    coordenadasdomapa.lon = localideal.long.toString()
+    initMap()
+  }
+
+  const Nav3 = {
+    template: ` <div class="quem">
+    <h1 style="font-size:2em">"Faça parte de uma comunidade aberta agora mesmo. <br> Conheça como funciona a economia compartilhada,<br> a cultura da abundância e inspire a todos!"</h1>
+    <strong>Seja você a mudança que este mundo precisa</strong>
+    <p>Esta parte do site ainda está em construção, por favor desculpe algum incoveniente e se houver reclamações. Favor entrar em contato no email abaixo</p>
+    <img src="https://res.cloudinary.com/dng6etlcm/image/upload/v1592084206/novaimg3_b2pfua.png" alt="Girl in a jacket" width="100%" height="50%">
+    <p>Contato para dúvidas ou sugestões: <strong>franz.gastring@gmail.com</strong>.</p>
+
+    </div>
+    `
+  }
+  const Nav4 = {
+    template: `<div>
+    <img src="https://res.cloudinary.com/dng6etlcm/image/upload/v1592070982/novaimg_bvobbx.png" alt="Girl in a jacket" width="100%" height="30%">
+
+    <form name="myform3" onsubmit="pedidos();return false" style="margin-top:1em">
+      <div class="form-group">
+        <label>Seu nome?</label>
+        <input class="form-control" name="Nome" placeholder="Pode escrever um apelido se quiser"/>
+      </div>
+    <div class="form-group">
+        <label>Poderia informar a sua localização?</label>
+        <input class="form-control" name="Endereco" placeholder="Pode colocar um endereço próximo se preferir.."/>
+      </div>
+      <div class="form-group">
+        <label>Ta precisando do que exatamente?</label>
+        <textarea rows="6" class="form-control" name="Resumo" placeholder="Pode escrever um resuminho."></textarea>
+      </div>
+      <div class="form-group">
+        <label>Telefone para contato?</label>
+        <textarea class="form-control" name="Phone" placeholder="Pode escrever um contato pros vizinhos interessados entrarem em contato."></textarea>
+      </div>
+      <div class="col text-center">
+      <button style="margin-top:1em" type="submit" class="btn-lg btn-info">Pedir</button>
+      </div>
+    </form>
+    <hr>
+    </div>`
+  }
+
+  const Nav5 = {
+    template: `<div>
+    </div>`
+  }
+  const routes = [
+    // {
+    //   path: '/nav1',
+    //   component: Nav1
+    // },
+    {
+      path: '/nav2',
+      component: Nav2
+
+    },
+    {
+      path: '/',
+      component: Nav3
+    },
+    {
+      path: '/nav3',
+      component: Nav3
+    },
+    {
+      path: '/nav5',
+      component: Nav5
+    },
+    {
+      path: '/nav4',
+      component: Nav4
+    }
+  ]
+
+  const router = new VueRouter({
+    routes // short for `routes: routes`
+  })
+
+  const app = new Vue({
+    router
+  }).$mount('#app')
+</script>
+
+</html>
