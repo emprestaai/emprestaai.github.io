@@ -2,7 +2,7 @@
 <html>
 
 <head>
-  <title>Empresta aí?</title>
+  <title>Styled Map Types</title>
   <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
   <meta charset="utf-8">
 
@@ -484,7 +484,7 @@
           lat: parseFloat(coordenadasdomapa.lat),
           lng: parseFloat(coordenadasdomapa.lon)
         },
-        zoom: 16,
+        zoom: 12,
         disableDefaultUI: true,
         scaleControl: false,
         streetViewControl: false,
@@ -616,7 +616,7 @@ document.addEventListener('submit', function(e) {
     coordenadasdomapa.lon = localideal.long.toString()
     initMap()
   }
-
+autolocaliza()
   const Nav3 = {
     template: ` <div class="quem">
     <h1 style="font-size:2em">"Faça parte de uma comunidade aberta agora mesmo. <br> Conheça como funciona a economia compartilhada,<br> a cultura da abundância e inspire a todos!"</h1>
@@ -673,7 +673,7 @@ document.addEventListener('submit', function(e) {
     },
     {
       path: '/',
-      component: Nav3
+      component: Nav2
     },
     {
       path: '/nav3',
